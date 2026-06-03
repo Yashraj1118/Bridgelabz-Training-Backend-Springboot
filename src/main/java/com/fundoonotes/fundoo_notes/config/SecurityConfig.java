@@ -2,6 +2,7 @@ package com.fundoonotes.fundoo_notes.config;
 
 import com.fundoonotes.fundoo_notes.security.JwtFilter;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -23,6 +24,9 @@ public class SecurityConfig {
 
     @Autowired
     private JwtFilter jwtFilter;
+
+    @Value("${app.frontend.url}")
+    private String frontendUrl;
 
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http)
@@ -58,10 +62,12 @@ public class SecurityConfig {
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
 
-        // Allow React frontend
-        config.setAllowedOrigins(List.of(
+        // Allow React frontend and Vercel domains
+        config.setAllowedOriginPatterns(List.of(
                 "http://localhost:5173",
-                "http://localhost:3000"
+                "http://localhost:3000",
+                "https://*.vercel.app",
+                frontendUrl
         ));
 
         // Allow all headers
