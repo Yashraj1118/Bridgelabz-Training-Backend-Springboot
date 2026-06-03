@@ -1,20 +1,27 @@
 package com.fundoonotes.fundoo_notes.service.impl;
 
 import com.fundoonotes.fundoo_notes.service.EmailService;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.mail.SimpleMailMessage;
-import org.springframework.mail.javamail.JavaMailSender;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.RestTemplate;
+
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 @Service
 public class EmailServiceImpl implements EmailService {
 
-    @Autowired
-    private JavaMailSender mailSender;
-
-    @Value("${spring.mail.username}")
+    @Value("${spring.mail.username}") // Reuse mail username as SendGrid verified sender
     private String fromEmail;
+
+    @Value("${SENDGRID_API_KEY:}")
+    private String sendGridApiKey;
+
+    private final RestTemplate restTemplate = new RestTemplate();
 
     @Override
     public void sendVerificationEmail(String toEmail, String token) {
@@ -76,11 +83,50 @@ public class EmailServiceImpl implements EmailService {
     private void sendEmail(String to,
                            String subject,
                            String body) {
-        SimpleMailMessage message = new SimpleMailMessage();
-        message.setFrom(fromEmail);
-        message.setTo(to);
-        message.setSubject(subject);
-        message.setText(body);
-        mailSender.send(message);
+        if (sendGridApiKey == null || sendGridApiKey.trim().isEmpty()) {
+            System.out.println("=================================================");
+            System.out.println("SENDGRID_API_KEY not set. Printing email to console:");
+            System.out.println("TO: " + to);
+            System.out.println("SUBJECT: " + subject);
+            System.out.println("BODY:\n" + body);
+            System.out.println("=================================================");
+            return;
+        }
+
+        try {
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            headers.setBearerAuth(sendGridApiKey);
+
+            // Construct JSON request body for SendGrid v3 Mail Send API
+            Map<String, Object> request = new HashMap<>();
+            
+            Map<String, Object> toMap = new HashMap<>();
+            toMap.put("email", to);
+            
+            Map<String, Object> personalization = new HashMap<>();
+            personalization.put("to", List.of(toMap));
+            
+            request.put("personalizations", List.of(personalization));
+            
+            Map<String, Object> fromMap = new HashMap<>();
+            fromMap.put("email", fromEmail);
+            request.put("from", fromMap);
+            
+            request.put("subject", subject);
+            
+            Map<String, Object> contentMap = new HashMap<>();
+            contentMap.put("type", "text/plain");
+            contentMap.put("value", body);
+            request.put("content", List.of(contentMap));
+
+            HttpEntity<Map<String, Object>> entity = new HttpEntity<>(request, headers);
+            String url = "https://api.sendgrid.com/v3/mail/send";
+            restTemplate.postForEntity(url, entity, String.class);
+            System.out.println("Email successfully sent to " + to + " via SendGrid HTTPS API!");
+        } catch (Exception e) {
+            System.err.println("Failed to send email via SendGrid: " + e.getMessage());
+            throw new RuntimeException("Email delivery failed: " + e.getMessage());
+        }
     }
 }
